@@ -1,9 +1,4 @@
--- =====================================================================================
---  ESQUEMA BASE (puede omitirse si ya existe un schema)
--- =====================================================================================
--- CREATE USER tienda IDENTIFIED BY tienda DEFAULT TABLESPACE users TEMPORARY TABLESPACE temp QUOTA UNLIMITED ON users;
--- GRANT CONNECT, RESOURCE TO tienda;
--- ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';
+
 
 -- =====================================================================================
 --  SEGURIDAD / AUDITORÍA
