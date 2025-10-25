@@ -581,3 +581,93 @@ SELECT line, position, text
 FROM user_errors
 WHERE name = 'FN_AUTH_HASH'
 ORDER BY sequence;
+
+
+SHOW USER;
+-- Funciones y SPs
+SELECT object_name, object_type, status
+FROM user_objects
+WHERE object_type IN ('FUNCTION','PROCEDURE')
+  AND object_name IN ('FN_AUTH_MAKE_SALT','FN_AUTH_HASH','SP_AUTH_REGISTER','SP_AUTH_LOGIN','SP_AUTH_LOGOUT')
+ORDER BY object_type, object_name;
+
+SHOW ERRORS PROCEDURE sp_auth_register;
+SHOW ERRORS PROCEDURE sp_auth_login;
+
+SELECT line, position, text
+FROM user_errors
+WHERE name IN ('SP_AUTH_REGISTER','SP_AUTH_LOGIN')
+ORDER BY name, sequence;
+
+CREATE OR REPLACE FUNCTION fn_auth_hash(p_password VARCHAR2, p_salt VARCHAR2)
+RETURN VARCHAR2
+IS
+  v_raw RAW(2000);
+BEGIN
+  -- SHA-256(password || salt), en minúsculas para comparación consistente
+  v_raw := UTL_RAW.CAST_TO_RAW(p_password || p_salt);
+  RETURN LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(v_raw, DBMS_CRYPTO.HASH_SH256)));
+END;
+/
+SHOW ERRORS;
+
+
+SELECT fn_auth_hash('test','abc') AS h FROM dual;
+
+ALTER PROCEDURE sp_auth_register COMPILE;
+ALTER PROCEDURE sp_auth_login    COMPILE;
+
+SELECT object_name, object_type, status
+FROM user_objects
+WHERE object_name IN ('SP_AUTH_REGISTER','SP_AUTH_LOGIN','SP_AUTH_LOGOUT','FN_AUTH_HASH');
+
+
+-- Semilla mínima (si no existen)
+MERGE INTO roles r USING (SELECT 'admin' n FROM dual) s ON (LOWER(r.nombre_rol)=s.n)
+WHEN NOT MATCHED THEN INSERT (nombre_rol) VALUES ('admin');
+
+MERGE INTO empresas e USING (SELECT 'Mi Empresa' n FROM dual) s ON (LOWER(e.nombre)=LOWER(s.n))
+WHEN NOT MATCHED THEN INSERT (nombre) VALUES ('Mi Empresa');
+COMMIT;
+
+-- Register
+SET SERVEROUTPUT ON
+DECLARE
+  v_empresa NUMBER;
+  v_rol     NUMBER;
+  v_user    NUMBER;
+BEGIN
+  SELECT id_empresa INTO v_empresa FROM empresas WHERE nombre = 'Mi Empresa';
+  SELECT id_rol     INTO v_rol     FROM roles    WHERE nombre_rol = 'admin';
+
+  sp_auth_register(
+    p_nombre      => 'Yasser',
+    p_usuario     => 'yasser',
+    p_email       => 'yasser@demo.com',
+    p_contrasena  => 'Secreta123',
+    p_telefono    => '8888-8888',
+    p_id_empresa  => v_empresa,
+    p_id_rol      => v_rol,
+    p_id_usuario  => v_user
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Nuevo usuario ID = '||v_user);
+END;
+
+-- Login
+VAR v_sesion NUMBER
+VAR v_uid    NUMBER
+EXEC sp_auth_login('yasser','Secreta123','127.0.0.1','VSCode',:v_sesion,:v_uid);
+PRINT v_sesion
+PRINT v_uid
+
+-- Logout
+EXEC sp_auth_logout(:v_sesion);
+
+
+-- Prueba de login
+VAR v_sesion NUMBER
+VAR v_uid    NUMBER
+EXEC sp_auth_login('yasser','Secreta123','127.0.0.1','VSCode', :v_sesion, :v_uid);
+PRINT v_sesion
+PRINT v_uid 
